@@ -45,7 +45,7 @@ class EnterpriseRAG:
         else:
             self.client = genai.Client()
             
-        self.generation_model = 'models/gemini-1.5-flash-latest'
+        self.generation_model = 'models/gemini-flash-latest'
         self.embedding_model = 'models/gemini-embedding-001' # 768 dimensions
         
         # 1. Setup Pinecone Index
