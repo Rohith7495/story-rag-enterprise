@@ -70,7 +70,7 @@ if prompt := st.chat_input("Ask a question about the story..."):
             st.markdown(response)
         else:
             try:
-                response = rag.answer_question(prompt)
+                response = rag.answer_question(prompt, chat_history=st.session_state.messages)
                 st.markdown(response)
             except Exception as e:
                 response = f"Error: {e}"

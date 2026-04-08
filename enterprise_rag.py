@@ -196,9 +196,9 @@ class EnterpriseRAG:
                         
         return best_chunks
         
-    def answer_question(self, question: str) -> str:
+    def answer_question(self, question: str, chat_history: list = None) -> str:
+        """Retrieves relevant context and generates an answer, considering chat history."""
         if not self.bm25:
-            # If BM25 isn't ready (app just started), try to rehydrate from Pinecone
             self.rehydrate_from_cloud()
             if not self.bm25:
                 raise ValueError("No documents loaded in Pinecone yet.")
@@ -207,17 +207,27 @@ class EnterpriseRAG:
         retrieved_chunks = self._hybrid_search(question)
         context = "\n\n---\n\n".join(retrieved_chunks)
         
-        prompt = f"""You are an assistant answering questions based strictly on the provided story excerpt.
+        # Format chat history for the prompt
+        history_text = ""
+        if chat_history:
+            for msg in chat_history[-5:]: # Look at last 5 messages for context
+                role = "User" if msg["role"] == "user" else "Assistant"
+                history_text += f"{role}: {msg['content']}\n"
+
+        prompt = f"""You are an assistant answering questions based strictly on the provided story excerpt and the conversation history.
 Do not use outside knowledge. If the answer is not in the story excerpts, say "I cannot answer this based on the provided story."
 
-Story Excerpts:
+Conversation History:
+{history_text}
+
+New Question: {question}
+
+Story Excerpts for Reference:
 {context}
 
-Question: {question}
+Final Answer:"""
 
-Answer:"""
-
-        print("Generating final synthesized answer...")
+        print("Generating final synthesized answer (with memory)...")
         response = self.client.models.generate_content(
             model=self.generation_model,
             contents=prompt,
