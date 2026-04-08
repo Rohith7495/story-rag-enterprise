@@ -56,7 +56,7 @@ class EnterpriseRAG:
             print(f"Creating Pinecone index '{self.index_name}'...")
             self.pc.create_index(
                 name=self.index_name,
-                dimension=768,
+                dimension=3072,
                 metric='cosine',
                 spec=ServerlessSpec(
                     cloud='aws',
