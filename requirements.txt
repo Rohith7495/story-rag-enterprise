@@ -1,0 +1,9 @@
+google-genai
+numpy
+python-dotenv
+chromadb
+langchain-text-splitters
+rank_bm25
+pymupdf
+python-docx
+streamlit

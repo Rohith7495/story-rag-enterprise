@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# Database / Storage
+chroma_storage/
+
+# System files
+.DS_Store
+
+# Document folder (optional, but often good to exclude processed raw data)
+# documents/

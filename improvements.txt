@@ -1,0 +1,50 @@
+# Improvement Ideas for Story RAG System
+
+1. Interactive Command Line (Easy)
+Right now, you have to edit the script to ask a new question. You could easily warp the bottom half of the script into an interactive loop that constantly asks you for input so you can have a full conversation with your document:
+```python
+while True:
+    question = input("\nAsk a question about the story (or type 'quit'): ")
+    if question.lower() == 'quit':
+        break
+    answer = rag.answer_question(question)
+    print(answer)
+```
+
+2. Loading External Files (Easy)
+Instead of hardcoding a raw string `dummy_story` directly in the python file, we can add a function to read text files from a folder. We could also add support for reading `.pdf` files using a library like `PyMuPDF` or reading `.docx` files using `python-docx`.
+
+3. Sentence-Aware Chunking (Medium)
+Currently, our chunking mechanism splits by raw word counts. This means it might cut a sentence exactly in half. We can update the chunking function to split on newlines (`\n`) or periods (`.`) so that it only captures complete sentences, preserving semantic meaning better.
+
+4. Vector Database / Persistent Storage (Medium)
+Right now, the script calculates the embeddings of the story every single time you run it. We can integrate a simple Vector Database like ChromaDB or FAISS. This would allow you to compute the embeddings once, save them to your hard drive, and then instantly retrieve facts without recalculating every time.
+
+5. Add a Web UI (Medium)
+You can easily transform this backend Python script into a beautiful web interface. We could use a library called Streamlit or Gradio, which allows you to build a UI in less than 20 lines of python.
+
+---
+
+# Second Sprint Improvements
+
+1. Conversational Memory
+Pass chat_history into the RAG so the AI remembers follow-up questions in the conversation.
+
+2. Source Citations & Transparency
+Extract chunk metadata so the LLM explicitly cites which chunk its answer came from for fact-checking.
+
+3. Better Document Parsing (OCR & Tables)
+Use libraries like LlamaParse to properly ingest images, charts, and tables from PDFs instead of grabbing raw textual noise.
+
+4. Metadata Filtering
+Save user, author, or time tags alongside ChromaDB chunks so users can filter knowledge dynamically.
+
+5. Neural Re-Ranking (Advanced)
+Introduce a Cross-Encoder Re-Ranker before generating prompt context to sort and filter retrieved chunks much more accurately than basic reciprocal rank fusion.
+
+---
+
+# Third Sprint Improvements
+
+1. Semantic Caching
+Implement a caching layer (like GPTCache) to save question embeddings and their final LLM answers, reducing API costs to $0.00 for identical or heavily repeated questions.
