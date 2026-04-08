@@ -7,3 +7,4 @@ rank_bm25
 pymupdf
 python-docx
 streamlit
+pinecone
