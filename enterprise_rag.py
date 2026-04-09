@@ -134,7 +134,7 @@ class EnterpriseRAG:
         # For a full implementation, we'd query with a placeholder.
         pass
 
-    def load_and_process_story(self, text: str, chunk_size: int = 1000, overlap: int = 100):
+    def load_and_process_story(self, text: str, chunk_size: int = 1000, overlap: int = 100, metadata: dict = None):
         print("1. Chunking story intelligently...")
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -146,6 +146,12 @@ class EnterpriseRAG:
         vectors_to_upsert = []
         embeddings = self.gemini_ef.embed_documents(new_chunks)
         
+        # Base metadata (shared by all chunks in this file)
+        base_meta = metadata or {}
+        if "timestamp" not in base_meta:
+            from datetime import datetime
+            base_meta["timestamp"] = datetime.now().isoformat()
+            
         for i, (chunk, emb) in enumerate(zip(new_chunks, embeddings)):
             # Create a unique ID based on the content hash to prevent duplicates
             chunk_id = hashlib.md5(chunk.encode()).hexdigest()
@@ -153,10 +159,15 @@ class EnterpriseRAG:
             if chunk_id not in self.chunk_ids:
                 self.chunks.append(chunk)
                 self.chunk_ids.append(chunk_id)
+                
+                # Combine base metadata with the chunk text
+                chunk_meta = base_meta.copy()
+                chunk_meta["text"] = chunk
+                
                 vectors_to_upsert.append({
                     "id": chunk_id,
                     "values": emb,
-                    "metadata": {"text": chunk}
+                    "metadata": chunk_meta
                 })
         
         if vectors_to_upsert:
@@ -209,19 +220,20 @@ class EnterpriseRAG:
         for file_path in files:
             if os.path.isfile(file_path) and not os.path.basename(file_path).startswith('.'):
                 print(f"Reading {file_path}...")
-                combined_text += self.load_single_document(file_path) + "\n\n"
-                
-        if combined_text.strip():
-            self.load_and_process_story(combined_text)
+                text = self.load_single_document(file_path)
+                if text.strip():
+                    # Associate each chunk in this file with its filename metadata
+                    self.load_and_process_story(text, metadata={"filename": os.path.basename(file_path)})
 
-    def _hybrid_search(self, question: str, top_k: int = 3):
+    def _hybrid_search(self, question: str, filter: dict = None, top_k: int = 3):
         """Combines Pinecone Vector Match with BM25 Keyword Match."""
         # -- 1. Pinecone Vector Search --
         query_emb = self.gemini_ef.embed_query(question)
         vector_results = self.index.query(
             vector=query_emb,
             top_k=top_k * 2,
-            include_metadata=True
+            include_metadata=True,
+            filter=filter
         )
         
         vector_chunks = [match['metadata']['text'] for match in vector_results['matches']]
@@ -264,14 +276,14 @@ class EnterpriseRAG:
                         
         return best_chunks
         
-    def answer_question(self, question: str, chat_history: list = None):
-        """Retrieves context and generates a streaming answer with Semantic Caching."""
+    def answer_question(self, question: str, chat_history: list = None, filter: dict = None):
+        """Retrieves context and generates a streaming answer with Metadata Filtering."""
         if not self.bm25:
             self.rehydrate_from_cloud()
             if not self.bm25:
                 raise ValueError("No documents loaded in Pinecone yet.")
         
-        # 1. Check Semantic Cache First
+        # 1. Check Semantic Cache First (Cache currently ignores filters for speed)
         query_emb = self.gemini_ef.embed_query(question)
         cached_result = self._check_cache(query_emb)
         
@@ -288,8 +300,8 @@ class EnterpriseRAG:
             }
 
         # 2. Proceed with RAG if Cache Miss
-        print("\nRunning Hybrid Search (Pinecone + BM25)...")
-        retrieved_chunks = self._hybrid_search(question)
+        print(f"\nRunning Hybrid Search with filter: {filter}")
+        retrieved_chunks = self._hybrid_search(question, filter=filter)
         
         # Format the context with numbered sources for the LLM to cite
         context_parts = []
