@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import hashlib
+import nest_asyncio
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -37,6 +38,18 @@ class EnterpriseRAG:
         load_dotenv(env_path, override=True)
         self.gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
         self.pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+        self.llama_api_key = os.environ.get("LLAMA_CLOUD_API_KEY")
+        
+        # Setup LlamaParse if key is present
+        self.parser = None
+        if self.llama_api_key:
+            from llama_parse import LlamaParse
+            nest_asyncio.apply()
+            self.parser = LlamaParse(
+                api_key=self.llama_api_key,
+                result_type="markdown", # High fidelity for LLMs
+                verbose=True
+            )
         
         if not self.pinecone_api_key:
             raise ValueError("PINECONE_API_KEY not found in environment variables.")
@@ -128,6 +141,16 @@ class EnterpriseRAG:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         elif ext == '.pdf':
+            # Use LlamaParse for high-quality PDF parsing if available
+            if self.parser:
+                print(f"Using LlamaParse for {os.path.basename(file_path)}...")
+                try:
+                    documents = self.parser.load_data(file_path)
+                    return "\n\n".join([doc.text for doc in documents])
+                except Exception as e:
+                    print(f"LlamaParse failed, falling back to basic PDF parsing: {e}")
+            
+            # Basic fallback
             import fitz
             doc = fitz.open(file_path)
             text = ""
