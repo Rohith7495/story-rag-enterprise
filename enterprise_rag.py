@@ -149,8 +149,9 @@ class EnterpriseRAG:
         # Base metadata (shared by all chunks in this file)
         base_meta = metadata or {}
         if "timestamp" not in base_meta:
-            from datetime import datetime
-            base_meta["timestamp"] = datetime.now().isoformat()
+            import time
+            # Save as integer Unix timestamp for range filtering
+            base_meta["timestamp"] = int(time.time())
             
         for i, (chunk, emb) in enumerate(zip(new_chunks, embeddings)):
             # Create a unique ID based on the content hash to prevent duplicates
@@ -276,14 +277,21 @@ class EnterpriseRAG:
                         
         return best_chunks
         
-    def answer_question(self, question: str, chat_history: list = None, filter: dict = None):
-        """Retrieves context and generates a streaming answer with Metadata Filtering."""
+    def answer_question(self, question: str, chat_history: list = None, filter: dict = None, time_window: int = None):
+        """Retrieves context and generates a streaming answer with Time & Metadata Filtering."""
         if not self.bm25:
             self.rehydrate_from_cloud()
             if not self.bm25:
                 raise ValueError("No documents loaded in Pinecone yet.")
         
-        # 1. Check Semantic Cache First (Cache currently ignores filters for speed)
+        # 1. Prepare Pinecone Filter
+        final_filter = filter or {}
+        if time_window:
+            import time
+            cutoff = int(time.time()) - time_window
+            final_filter["timestamp"] = {"$gte": cutoff}
+            
+        # 2. Check Semantic Cache First (Speed)
         query_emb = self.gemini_ef.embed_query(question)
         cached_result = self._check_cache(query_emb)
         
@@ -299,9 +307,9 @@ class EnterpriseRAG:
                 "is_cached": True
             }
 
-        # 2. Proceed with RAG if Cache Miss
-        print(f"\nRunning Hybrid Search with filter: {filter}")
-        retrieved_chunks = self._hybrid_search(question, filter=filter)
+        # 3. Proceed with RAG if Cache Miss
+        print(f"\nRunning Hybrid Search with filter: {final_filter}")
+        retrieved_chunks = self._hybrid_search(question, filter=final_filter)
         
         # Format the context with numbered sources for the LLM to cite
         context_parts = []
