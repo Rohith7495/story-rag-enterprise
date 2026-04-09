@@ -75,6 +75,10 @@ if prompt := st.chat_input("Ask a question about the story..."):
                 rag_response = rag.answer_question(prompt, chat_history=st.session_state.messages)
                 stream = rag_response["answer_stream"]
                 sources = rag_response["sources"]
+                is_cached = rag_response.get("is_cached", False)
+                
+                if is_cached:
+                    st.caption("🚀 Answer retrieved from Semantic Cache (Instant)")
                 
                 # Use st.write_stream for real-time typing effect
                 response = st.write_stream(stream)

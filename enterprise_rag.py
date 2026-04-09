@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import hashlib
+import json
 import nest_asyncio
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
@@ -39,6 +40,11 @@ class EnterpriseRAG:
         self.gemini_api_key = api_key or os.environ.get("GEMINI_API_KEY")
         self.pinecone_api_key = os.environ.get("PINECONE_API_KEY")
         self.llama_api_key = os.environ.get("LLAMA_CLOUD_API_KEY")
+        
+        # Semantic Cache settings
+        self.cache_path = os.path.join(os.path.dirname(__file__), 'semantic_cache.json')
+        self.cache = self._load_cache()
+        self.cache_threshold = 0.96 # Very high threshold for accuracy
         
         # Setup LlamaParse if key is present
         self.parser = None
@@ -90,6 +96,35 @@ class EnterpriseRAG:
         # For simplicity in this demo, we'll keep the local metadata if available or re-index.
         # However, a real app would store chunks in Pinecone metadata and fetch.
         self._sync_local_metadata()
+
+    def _load_cache(self):
+        if os.path.exists(self.cache_path):
+            with open(self.cache_path, 'r') as f:
+                return json.load(f)
+        return []
+
+    def _save_to_cache(self, question_emb, answer, sources):
+        self.cache.append({
+            "embedding": question_emb,
+            "answer": answer,
+            "sources": sources
+        })
+        with open(self.cache_path, 'w') as f:
+            json.dump(self.cache, f)
+
+    def _check_cache(self, query_emb):
+        """Checks if a similar question has been answered before."""
+        if not self.cache:
+            return None
+            
+        for entry in self.cache:
+            # Simple cosine similarity
+            cached_emb = np.array(entry["embedding"])
+            similarity = np.dot(query_emb, cached_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(cached_emb))
+            
+            if similarity > self.cache_threshold:
+                return entry
+        return None
 
     def _sync_local_metadata(self):
         """Fetches existing chunks from Pinecone to populate local BM25."""
@@ -230,12 +265,29 @@ class EnterpriseRAG:
         return best_chunks
         
     def answer_question(self, question: str, chat_history: list = None):
-        """Retrieves relevant context and generates a streaming answer with source citations."""
+        """Retrieves context and generates a streaming answer with Semantic Caching."""
         if not self.bm25:
             self.rehydrate_from_cloud()
             if not self.bm25:
                 raise ValueError("No documents loaded in Pinecone yet.")
+        
+        # 1. Check Semantic Cache First
+        query_emb = self.gemini_ef.embed_query(question)
+        cached_result = self._check_cache(query_emb)
+        
+        if cached_result:
+            print("🚀 Semantic Cache Hit! Returning instant answer.")
+            def cache_generator():
+                yield "*(Cached Answer)*  \n"
+                yield cached_result["answer"]
             
+            return {
+                "answer_stream": cache_generator(),
+                "sources": cached_result["sources"],
+                "is_cached": True
+            }
+
+        # 2. Proceed with RAG if Cache Miss
         print("\nRunning Hybrid Search (Pinecone + BM25)...")
         retrieved_chunks = self._hybrid_search(question)
         
@@ -280,12 +332,18 @@ Final Answer:"""
         )
         
         def stream_generator():
+            full_response = ""
             for chunk in response_stream:
+                full_response += chunk.text
                 yield chunk.text
+            
+            # Save to cache after streaming is complete
+            self._save_to_cache(query_emb, full_response, retrieved_chunks)
 
         return {
             "answer_stream": stream_generator(),
-            "sources": retrieved_chunks
+            "sources": retrieved_chunks,
+            "is_cached": False
         }
 
     def rehydrate_from_cloud(self):
