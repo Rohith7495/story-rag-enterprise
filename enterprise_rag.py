@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import hashlib
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -93,25 +94,30 @@ class EnterpriseRAG:
             separators=["\n\n", "\n", ".", " ", ""]
         )
         new_chunks = text_splitter.split_text(text)
-        start_idx = len(self.chunks)
         
         vectors_to_upsert = []
         embeddings = self.gemini_ef.embed_documents(new_chunks)
         
         for i, (chunk, emb) in enumerate(zip(new_chunks, embeddings)):
-            chunk_id = f"segment_{start_idx + i}"
-            self.chunks.append(chunk)
-            self.chunk_ids.append(chunk_id)
-            vectors_to_upsert.append({
-                "id": chunk_id,
-                "values": emb,
-                "metadata": {"text": chunk}
-            })
+            # Create a unique ID based on the content hash to prevent duplicates
+            chunk_id = hashlib.md5(chunk.encode()).hexdigest()
+            
+            if chunk_id not in self.chunk_ids:
+                self.chunks.append(chunk)
+                self.chunk_ids.append(chunk_id)
+                vectors_to_upsert.append({
+                    "id": chunk_id,
+                    "values": emb,
+                    "metadata": {"text": chunk}
+                })
         
-        print(f"2. Upserting {len(vectors_to_upsert)} vectors to Pinecone...")
-        self.index.upsert(vectors=vectors_to_upsert)
+        if vectors_to_upsert:
+            print(f"2. Upserting {len(vectors_to_upsert)} unique vectors to Pinecone...")
+            self.index.upsert(vectors=vectors_to_upsert)
+        else:
+            print("2. No new content detected. Pinecone is already up to date!")
         
-        print("3. Indexing BM25 Exact Keyword Search...")
+        print("3. Refreshing BM25 Exact Keyword Search...")
         tokenized_corpus = [doc.lower().split(" ") for doc in self.chunks]
         self.bm25 = BM25Okapi(tokenized_corpus)
         print("Enterprise Indexing Complete!")
