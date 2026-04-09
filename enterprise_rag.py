@@ -185,20 +185,24 @@ class EnterpriseRAG:
             
         best_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k]
         
-        # Retrieve final text for best chunks
-        # We can optimize this by mapping IDs to text locally or fetching from Pinecone metadata
+        # Retrieve final text for best chunks (and ensure uniqueness)
         best_chunks = []
+        seen_texts = set()
+        
         for cid in best_ids:
-            # First look in current session chunks
+            chunk_text = None
             if cid in self.chunk_ids:
                 idx = self.chunk_ids.index(cid)
-                best_chunks.append(self.chunks[idx])
+                chunk_text = self.chunks[idx]
             else:
-                # Fallback to Pinecone metadata if not in current session list
                 for match in vector_results['matches']:
                     if match['id'] == cid:
-                        best_chunks.append(match['metadata']['text'])
+                        chunk_text = match['metadata']['text']
                         break
+            
+            if chunk_text and chunk_text not in seen_texts:
+                best_chunks.append(chunk_text)
+                seen_texts.add(chunk_text)
                         
         return best_chunks
         
