@@ -325,26 +325,40 @@ Final Answer:"""
 
         print("Generating streaming answer with citations...")
         
-        # Use generate_content_stream for real-time feedback
-        response_stream = self.client.models.generate_content_stream(
-            model=self.generation_model,
-            contents=prompt,
-        )
+        # Use generate_content_stream for real-time feedback with automatic retries
+        import time
+        max_retries = 3
+        retry_delay = 2 # seconds
         
-        def stream_generator():
-            full_response = ""
-            for chunk in response_stream:
-                full_response += chunk.text
-                yield chunk.text
-            
-            # Save to cache after streaming is complete
-            self._save_to_cache(query_emb, full_response, retrieved_chunks)
+        for attempt in range(max_retries):
+            try:
+                response_stream = self.client.models.generate_content_stream(
+                    model=self.generation_model,
+                    contents=prompt,
+                )
+                
+                def stream_generator():
+                    full_response = ""
+                    for chunk in response_stream:
+                        full_response += chunk.text
+                        yield chunk.text
+                    
+                    # Save to cache after streaming is complete
+                    self._save_to_cache(query_emb, full_response, retrieved_chunks)
 
-        return {
-            "answer_stream": stream_generator(),
-            "sources": retrieved_chunks,
-            "is_cached": False
-        }
+                return {
+                    "answer_stream": stream_generator(),
+                    "sources": retrieved_chunks,
+                    "is_cached": False
+                }
+            except Exception as e:
+                is_busy = "503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e)
+                if is_busy and attempt < max_retries - 1:
+                    print(f"⚠️ Gemini busy (Attempt {attempt+1}/{max_retries}). Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2 # Exponential backoff
+                else:
+                    raise e
 
     def rehydrate_from_cloud(self):
         """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
