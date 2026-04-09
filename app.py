@@ -72,10 +72,18 @@ if prompt := st.chat_input("Ask a question about the story..."):
             st.markdown(response)
         else:
             try:
-                response = rag.answer_question(prompt, chat_history=st.session_state.messages)
+                rag_response = rag.answer_question(prompt, chat_history=st.session_state.messages)
+                response = rag_response["answer"]
+                sources = rag_response["sources"]
+                
                 st.markdown(response)
+                
+                # Show sources in an expander for transparency
+                with st.expander("🔍 View Sources & Fact-Check"):
+                    for i, src in enumerate(sources):
+                        st.info(f"**Source {i+1}**\n\n{src}")
             except Exception as e:
                 response = f"Error: {e}"
-                st.markdown(response)
+                st.error(response)
         
     st.session_state.messages.append({"role": "assistant", "content": response})

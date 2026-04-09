@@ -202,8 +202,8 @@ class EnterpriseRAG:
                         
         return best_chunks
         
-    def answer_question(self, question: str, chat_history: list = None) -> str:
-        """Retrieves relevant context and generates an answer, considering chat history."""
+    def answer_question(self, question: str, chat_history: list = None) -> dict:
+        """Retrieves relevant context and generates an answer with source citations."""
         if not self.bm25:
             self.rehydrate_from_cloud()
             if not self.bm25:
@@ -211,7 +211,12 @@ class EnterpriseRAG:
             
         print("\nRunning Hybrid Search (Pinecone + BM25)...")
         retrieved_chunks = self._hybrid_search(question)
-        context = "\n\n---\n\n".join(retrieved_chunks)
+        
+        # Format the context with numbered sources for the LLM to cite
+        context_parts = []
+        for i, chunk in enumerate(retrieved_chunks):
+            context_parts.append(f"--- SOURCE {i+1} ---\n{chunk}")
+        context_text = "\n\n".join(context_parts)
         
         # Format chat history for the prompt
         history_text = ""
@@ -220,25 +225,34 @@ class EnterpriseRAG:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 history_text += f"{role}: {msg['content']}\n"
 
-        prompt = f"""You are an assistant answering questions based strictly on the provided story excerpt and the conversation history.
-Do not use outside knowledge. If the answer is not in the story excerpts, say "I cannot answer this based on the provided story."
+        prompt = f"""You are an assistant answering questions based strictly on the provided sources and conversation history.
+Your goal is to be accurate and transparent. 
+
+INSTRUCTIONS:
+1. Answer the question using ONLY the provided sources.
+2. You MUST cite the source number in brackets (e.g., [Source 1], [Source 2]) whenever you use information from a specific source.
+3. If the answer is not in the sources, say "I cannot answer this based on the provided sources."
+4. Be concise and professional.
 
 Conversation History:
 {history_text}
 
 New Question: {question}
 
-Story Excerpts for Reference:
-{context}
+Sources:
+{context_text}
 
 Final Answer:"""
 
-        print("Generating final synthesized answer (with memory)...")
+        print("Generating synthesized answer with citations...")
         response = self.client.models.generate_content(
             model=self.generation_model,
             contents=prompt,
         )
-        return response.text
+        return {
+            "answer": response.text,
+            "sources": retrieved_chunks
+        }
 
     def rehydrate_from_cloud(self):
         """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
