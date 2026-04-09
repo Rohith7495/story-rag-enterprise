@@ -9,8 +9,6 @@ st.set_page_config(page_title="Enterprise Story RAG", page_icon="📚", layout="
 
 @st.cache_resource
 def get_rag_pipeline():
-    # Clear cache to ensure new code signature is picked up
-    st.cache_resource.clear()
     api_key = os.environ.get("GEMINI_API_KEY")
     return EnterpriseRAG(api_key=api_key)
 
