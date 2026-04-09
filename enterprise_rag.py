@@ -229,8 +229,8 @@ class EnterpriseRAG:
                         
         return best_chunks
         
-    def answer_question(self, question: str, chat_history: list = None) -> dict:
-        """Retrieves relevant context and generates an answer with source citations."""
+    def answer_question(self, question: str, chat_history: list = None):
+        """Retrieves relevant context and generates a streaming answer with source citations."""
         if not self.bm25:
             self.rehydrate_from_cloud()
             if not self.bm25:
@@ -258,7 +258,7 @@ Your goal is to be extremely direct and precise.
 INSTRUCTIONS:
 1. Answer the question using ONLY the provided sources.
 2. CITATIONS: You MUST cite the source number in brackets (e.g., [Source 1]) for every claim.
-3. DIRECTNESS: Answer EXACTLY what is asked. Do not include extra information (like dates, locations, or background) unless the user specifically asked for those details.
+3. DIRECTNESS: Answer EXACTLY what is asked. Do not include extra information unless specific details are requested.
 4. If the answer is not in the sources, say "I cannot answer this based on the provided sources."
 
 Conversation History:
@@ -271,13 +271,20 @@ Sources:
 
 Final Answer:"""
 
-        print("Generating synthesized answer with citations...")
-        response = self.client.models.generate_content(
+        print("Generating streaming answer with citations...")
+        
+        # Use generate_content_stream for real-time feedback
+        response_stream = self.client.models.generate_content_stream(
             model=self.generation_model,
             contents=prompt,
         )
+        
+        def stream_generator():
+            for chunk in response_stream:
+                yield chunk.text
+
         return {
-            "answer": response.text,
+            "answer_stream": stream_generator(),
             "sources": retrieved_chunks
         }
 

@@ -73,10 +73,11 @@ if prompt := st.chat_input("Ask a question about the story..."):
         else:
             try:
                 rag_response = rag.answer_question(prompt, chat_history=st.session_state.messages)
-                response = rag_response["answer"]
+                stream = rag_response["answer_stream"]
                 sources = rag_response["sources"]
                 
-                st.markdown(response)
+                # Use st.write_stream for real-time typing effect
+                response = st.write_stream(stream)
                 
                 # Show sources in an expander for transparency
                 with st.expander("🔍 View Sources & Fact-Check"):
