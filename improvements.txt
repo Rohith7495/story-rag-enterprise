@@ -37,14 +37,10 @@ Extract chunk metadata so the LLM explicitly cites which chunk its answer came f
 Use libraries like LlamaParse to properly ingest images, charts, and tables from PDFs instead of grabbing raw textual noise.
 
 4. Metadata Filtering
-Save user, author, or time tags alongside ChromaDB chunks so users can filter knowledge dynamically.
+Save user, author, or time tags alongside Pinecone chunks so users can filter knowledge dynamically.
 
-5. Neural Re-Ranking (Advanced)
-Introduce a Cross-Encoder Re-Ranker before generating prompt context to sort and filter retrieved chunks much more accurately than basic reciprocal rank fusion.
-
----
-
-# Third Sprint Improvements
-
-1. Semantic Caching
+5. Semantic Caching
 Implement a caching layer (like GPTCache) to save question embeddings and their final LLM answers, reducing API costs to $0.00 for identical or heavily repeated questions.
+
+6. Neural Re-Ranking (Advanced)
+Introduce a Cross-Encoder Re-Ranker before generating prompt context to sort and filter retrieved chunks much more accurately than basic reciprocal rank fusion.
