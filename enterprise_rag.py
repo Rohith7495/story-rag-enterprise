@@ -108,7 +108,7 @@ class EnterpriseRAG:
             print(f"Creating Pinecone index '{self.index_name}'...")
             self.pc.create_index(
                 name=self.index_name,
-                dimension=768, # Match gemini-embedding-001
+                dimension=3072, # Match gemini-embedding-001 size
                 metric='cosine',
                 spec=ServerlessSpec(
                     cloud='aws',
@@ -163,7 +163,7 @@ class EnterpriseRAG:
         print("Rehydrating BM25 from Pinecone cloud...")
         try:
             # A completely zero vector fails in Cosine similarity (divide by zero). Usign a small constant vector.
-            dummy_vector = [1.0] * 768
+            dummy_vector = [1.0] * 3072
             results = self.index.query(vector=dummy_vector, top_k=100, include_metadata=True)
             
             if results and results.get('matches'):
@@ -195,7 +195,7 @@ class EnterpriseRAG:
                 "status": "Ready",
                 "dimension": desc.dimension,
                 "total_vectors": stats.total_vector_count,
-                "is_correct_dim": desc.dimension == 768,
+                "is_correct_dim": desc.dimension == 3072,
                 "namespaces": stats.namespaces
             }
         except Exception as e:
@@ -205,7 +205,7 @@ class EnterpriseRAG:
         """Tries to find any vector in the index regardless of stats."""
         try:
             # Query with a non-zero vector (cosine similarity fails on pure zeros)
-            res = self.index.query(vector=[1.0]*768, top_k=1, include_metadata=True)
+            res = self.index.query(vector=[1.0]*3072, top_k=1, include_metadata=True)
             if res and res.get('matches'):
                 return {"success": True, "match": res['matches'][0]['metadata'].get('text', 'ID: ' + res['matches'][0]['id'])}
             return {"success": False, "message": "No matches found. The index might be empty or still propagating."}
@@ -228,7 +228,7 @@ class EnterpriseRAG:
             time.sleep(5) # Give Pinecone time to process deletion
             self.pc.create_index(
                 name=self.index_name,
-                dimension=768,
+                dimension=3072,
                 metric='cosine',
                 spec=ServerlessSpec(cloud='aws', region='us-east-1')
             )

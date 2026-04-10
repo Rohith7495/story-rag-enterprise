@@ -83,13 +83,13 @@ with st.sidebar:
             
             if not health["is_correct_dim"]:
                 st.error("🚨 DIMENSION MISMATCH DETECTED!")
-                st.warning("Your index is 3072D but Gemini needs 768D. This is why you see 0 vectors.")
+                st.warning("Your index is 768D but Gemini generated 3072D vectors. This is why you see 0 vectors.")
                 if st.button("🔥 Wipe & Recreate Index"):
                     if rag.delete_and_recreate_index():
-                        st.success("Index Recreated! Please re-upload your files.")
+                        st.success("Index Recreated! Please press the Force Re-Index button below, or re-upload your files.")
                         st.rerun()
             else:
-                st.info("Dimensions are correct (768D).")
+                st.info("Dimensions are correct (3072D).")
                 if st.button("🔄 Force Re-Index Local Memory"):
                     if rag.force_upsert_all():
                         st.success("Success! Local memory resent to cloud.")
