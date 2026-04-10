@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import hashlib
 import json
@@ -26,11 +27,30 @@ class GeminiEmbeddingFunction:
         all_embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            response = self.client.models.embed_content(
-                model=self.model_name,
-                contents=batch
-            )
-            all_embeddings.extend([e.values for e in response.embeddings])
+            
+            # Quota handling for Free Tier (100 embed requests/min)
+            max_retries = 5
+            retry_delay = 10 # Initial wait
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.models.embed_content(
+                        model=self.model_name,
+                        contents=batch
+                    )
+                    all_embeddings.extend([e.values for e in response.embeddings])
+                    break # Success
+                except Exception as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        if attempt < max_retries - 1:
+                            print(f"⚠️ Embedding quota hit. Waiting {retry_delay}s to respect Free Tier limits...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2 # Exponential backoff
+                        else:
+                            raise e
+                    else:
+                        raise e
+                        
         return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
@@ -154,7 +174,6 @@ class EnterpriseRAG:
         # Base metadata (shared by all chunks in this file)
         base_meta = metadata or {}
         if "timestamp" not in base_meta:
-            import time
             # Save as integer Unix timestamp for range filtering
             base_meta["timestamp"] = int(time.time())
             
@@ -292,7 +311,6 @@ class EnterpriseRAG:
         # 1. Prepare Pinecone Filter
         final_filter = filter or {}
         if time_window:
-            import time
             cutoff = int(time.time()) - time_window
             final_filter["timestamp"] = {"$gte": cutoff}
             
@@ -351,7 +369,6 @@ Final Answer:"""
         print("Generating streaming answer with citations...")
         
         # Use generate_content_stream for real-time feedback with automatic retries
-        import time
         max_retries = 3
         retry_delay = 2 # seconds
         
