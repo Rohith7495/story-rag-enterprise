@@ -9,3 +9,4 @@ streamlit
 pinecone
 llama-parse
 nest_asyncio
+sentence-transformers

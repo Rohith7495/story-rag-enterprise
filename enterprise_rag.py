@@ -126,7 +126,7 @@ class EnterpriseRAG:
         
         # Note: In Pinecone, we usually fetch all if we want to hydrate BM25 
         # For simplicity in this demo, we'll keep the local metadata if available or re-index.
-        # However, a real app would store chunks in Pinecone metadata and fetch.
+        self.reranker = None
         self.rehydrate_from_cloud()
 
     def _load_cache(self):
@@ -311,7 +311,7 @@ class EnterpriseRAG:
         top_bm25_indices = np.argsort(bm25_scores)[-min(top_k * 2, len(self.chunks)):][::-1]
         bm25_ids = [self.chunk_ids[i] for i in top_bm25_indices]
         
-        # -- 3. Reciprocal Rank Fusion (RRF) --
+        # -- 3. Reciprocal Rank Fusion (RRF) on a larger pool --
         rrf_scores = {}
         for rank, chunk_id in enumerate(vector_ids):
             rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0) + 1.0 / (60 + rank)
@@ -319,13 +319,14 @@ class EnterpriseRAG:
         for rank, chunk_id in enumerate(bm25_ids):
             rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0) + 1.0 / (60 + rank)
             
-        best_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k]
+        # Get extended candidate pool to re-rank
+        candidate_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k * 3]
         
-        # Retrieve final text for best chunks (and ensure uniqueness)
-        best_chunks = []
+        # Retrieve text chunks for candidates
+        candidate_chunks = []
         seen_texts = set()
         
-        for cid in best_ids:
+        for cid in candidate_ids:
             chunk_text = None
             if cid in self.chunk_ids:
                 idx = self.chunk_ids.index(cid)
@@ -337,9 +338,30 @@ class EnterpriseRAG:
                         break
             
             if chunk_text and chunk_text not in seen_texts:
-                best_chunks.append(chunk_text)
+                candidate_chunks.append(chunk_text)
                 seen_texts.add(chunk_text)
-                        
+                
+        # -- 4. Cross-Encoder Re-Ranking --
+        if not candidate_chunks:
+            return []
+            
+        print("Neural Re-Ranking candidates...")
+        if self.reranker is None:
+            # Lazy load to avoid blocking startup
+            from sentence_transformers import CrossEncoder
+            self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512)
+            
+        # Create pairs of (question, chunk)
+        pairs = [[question, chunk] for chunk in candidate_chunks]
+        
+        # Get precise neural relevance scores
+        rerank_scores = self.reranker.predict(pairs)
+        
+        # Sort candidates by the CrossEncoder score, highest first
+        ranked_pairs = sorted(zip(candidate_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
+        
+        # Return only the absolute best `top_k` chunks
+        best_chunks = [chunk for chunk, score in ranked_pairs[:top_k]]
         return best_chunks
         
     def answer_question(self, question: str, chat_history: list = None, filter: dict = None, time_window: int = None):
