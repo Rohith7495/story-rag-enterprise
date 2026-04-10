@@ -22,11 +22,16 @@ class GeminiEmbeddingFunction:
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        response = self.client.models.embed_content(
-            model=self.model_name,
-            contents=texts
-        )
-        return [e.values for e in response.embeddings]
+        batch_size = 100
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            response = self.client.models.embed_content(
+                model=self.model_name,
+                contents=batch
+            )
+            all_embeddings.extend([e.values for e in response.embeddings])
+        return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
