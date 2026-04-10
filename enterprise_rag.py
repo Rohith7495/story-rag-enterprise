@@ -76,7 +76,7 @@ class EnterpriseRAG:
             print(f"Creating Pinecone index '{self.index_name}'...")
             self.pc.create_index(
                 name=self.index_name,
-                dimension=3072,
+                dimension=768, # Match gemini-embedding-001
                 metric='cosine',
                 spec=ServerlessSpec(
                     cloud='aws',
@@ -384,7 +384,8 @@ Final Answer:"""
         """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
         print("Rehydrating BM25 from Pinecone cloud...")
         # Since Pinecone doesn't support easy 'list all', we query with a random vector
-        random_vector = list(np.random.rand(768))
+        # We use .tolist() to ensure standard Python floats for orjson serialization
+        random_vector = np.random.rand(768).tolist()
         results = self.index.query(vector=random_vector, top_k=100, include_metadata=True)
         
         self.chunks = []
