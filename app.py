@@ -66,6 +66,33 @@ with st.sidebar:
             else:
                 st.warning("Cloud search returned 0 results. Use the management section to upload documents.")
 
+    st.divider()
+    with st.expander("🛠️ Debug & Repair Index"):
+        health = rag.check_index_health()
+        if health["status"] == "Ready":
+            st.success("Internal Connection: OK")
+            st.write(f"Index Dimension: `{health['dimension']}`")
+            st.divider()
+            if st.button("🔍 Run Smoke Test Query"):
+                test = rag.run_smoke_test()
+                if test["success"]:
+                    st.success("🔥 Smoke Test Passed! Data exists in cloud.")
+                    st.write(f"Sample Content Found: `{test['match'][:150]}...`")
+                else:
+                    st.error(f"Smoke Test Failed: {test['message']}")
+            
+            if not health["is_correct_dim"]:
+                st.error("🚨 DIMENSION MISMATCH DETECTED!")
+                st.warning("Your index is 3072D but Gemini needs 768D. This is why you see 0 vectors.")
+                if st.button("🔥 Wipe & Recreate Index"):
+                    if rag.delete_and_recreate_index():
+                        st.success("Index Recreated! Please re-upload your files.")
+                        st.rerun()
+            else:
+                st.info("Dimensions are correct (768D).")
+        else:
+            st.error(f"Connection Error: {health.get('message')}")
+
 # 4. Processing Interface
 with st.expander("☁️ Cloud Data Management", expanded=False):
     uploaded_files = st.file_uploader("Upload new documents to Pinecone", accept_multiple_files=True)

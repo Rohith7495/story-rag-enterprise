@@ -158,15 +158,117 @@ class EnterpriseRAG:
                 return entry
         return None
 
-    def _sync_local_metadata(self):
-        """Fetches existing chunks from Pinecone to populate local BM25."""
-        # Pinecone free tier doesn't support 'list' operations easily, 
-        # so we'll rely on the idea that documents are added in this session 
-        # or we fetch them if we had stored their IDs.
-        # For a full implementation, we'd query with a placeholder.
-        pass
+    def rehydrate_from_cloud(self):
+        """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
+        print("Rehydrating BM25 from Pinecone cloud...")
+        try:
+            # A zero-vector is more reliable for 'listing' near the origin in small/new indexes
+            zero_vector = [0.0] * 768
+            results = self.index.query(vector=zero_vector, top_k=100, include_metadata=True)
+            
+            if results and results.get('matches'):
+                new_chunks = []
+                new_ids = []
+                for match in results['matches']:
+                    if 'text' in match['metadata']:
+                        new_chunks.append(match['metadata']['text'])
+                        new_ids.append(match['id'])
+                
+                if new_chunks:
+                    self.chunks = new_chunks
+                    self.chunk_ids = new_ids
+                    
+                    tokenized_corpus = [doc.lower().split(" ") for doc in self.chunks]
+                    self.bm25 = BM25Okapi(tokenized_corpus)
+                    print(f"Cloud Sync Complete: {len(self.chunks)} chunks loaded.")
+                    return True
+        except Exception as e:
+            print(f"Rehydration error: {e}")
+        return False
+
+    def check_index_health(self):
+        """Checks index dimensions and connectivity."""
+        try:
+            desc = self.pc.describe_index(self.index_name)
+            stats = self.index.describe_index_stats()
+            return {
+                "status": "Ready",
+                "dimension": desc.dimension,
+                "total_vectors": stats.total_vector_count,
+                "is_correct_dim": desc.dimension == 768,
+                "namespaces": stats.namespaces
+            }
+        except Exception as e:
+            return {"status": "Error", "message": str(e)}
+
+    def run_smoke_test(self):
+        """Tries to find any vector in the index regardless of stats."""
+        try:
+            # Query with a zero vector to see if we get ANY matches
+            res = self.index.query(vector=[0.0]*768, top_k=1, include_metadata=True)
+            if res and res.get('matches'):
+                return {"success": True, "match": res['matches'][0]['metadata'].get('text', 'ID: ' + res['matches'][0]['id'])}
+            return {"success": False, "message": "No matches found. The index might be empty or still propagating."}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def delete_and_recreate_index(self):
+        """Wipes the index to fix dimension mismatches or corruption."""
+        try:
+            self.pc.delete_index(self.index_name)
+            import time
+            time.sleep(5) # Give Pinecone time to process deletion
+            self.pc.create_index(
+                name=self.index_name,
+                dimension=768,
+                metric='cosine',
+                spec=ServerlessSpec(cloud='aws', region='us-east-1')
+            )
+            self.index = self.pc.Index(self.index_name)
+            self.chunks = []
+            self.chunk_ids = []
+            self.bm25 = None
+            return True
+        except Exception as e:
+            print(f"Wipe failed: {e}")
+            return False
+
+    def load_single_document(self, file_path: str):
+        ext = os.path.splitext(file_path)[1].lower()
+        extracted_text = ""
+        
+        if ext == '.txt':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                extracted_text = f.read()
+        elif ext == '.pdf':
+            # 1. Try LlamaParse first (High Fidelity)
+            if self.parser:
+                try:
+                    documents = self.parser.load_data(file_path)
+                    extracted_text = "\n\n".join([doc.text for doc in documents])
+                    print(f"LlamaParse extracted {len(extracted_text)} chars.")
+                except Exception as e:
+                    print(f"LlamaParse failed: {e}")
+            
+            # 2. Fallback to Deep Scan (PyMuPDF) if LlamaParse is empty/fails
+            if not extracted_text.strip():
+                import fitz
+                doc = fitz.open(file_path)
+                extracted_text = "\n".join([page.get_text() for page in doc])
+                print(f"PyMuPDF Fallback extracted {len(extracted_text)} chars.")
+                
+        elif ext == '.docx':
+            from docx import Document
+            doc = Document(file_path)
+            extracted_text = "\n".join([p.text for p in doc.paragraphs])
+            
+        return extracted_text
 
     def load_and_process_story(self, text: str, chunk_size: int = 1000, overlap: int = 100, metadata: dict = None, status_callback: callable = None):
+        if not text or not text.strip():
+            if status_callback: status_callback("Error: No text extracted from document.")
+            return
+
         if status_callback: status_callback("Chunking document...")
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -415,40 +517,6 @@ Final Answer:"""
                     retry_delay *= 2 # Exponential backoff
                 else:
                     raise e
-
-    def rehydrate_from_cloud(self):
-        """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
-        print("Rehydrating BM25 from Pinecone cloud...")
-        # A zero-vector is more reliable for 'listing' near the origin in small/new indexes
-        zero_vector = [0.0] * 768
-        results = self.index.query(vector=zero_vector, top_k=100, include_metadata=True)
-        
-        # Only overwrite if we actually found data in the cloud
-        if results and results.get('matches'):
-            new_chunks = []
-            new_ids = []
-            for match in results['matches']:
-                if 'text' in match['metadata']:
-                    new_chunks.append(match['metadata']['text'])
-                    new_ids.append(match['id'])
-            
-            if new_chunks:
-                self.chunks = new_chunks
-                self.chunk_ids = new_ids
-                
-                tokenized_corpus = [doc.lower().split(" ") for doc in self.chunks]
-                self.bm25 = BM25Okapi(tokenized_corpus)
-                print(f"Cloud Sync Complete: {len(self.chunks)} chunks loaded.")
-                return True
-        return False
-
-    def get_cloud_stats(self):
-        """Returns total vector count from Pinecone."""
-        try:
-            stats = self.index.describe_index_stats()
-            return stats.total_vector_count
-        except:
-            return 0
 
 if __name__ == "__main__":
     rag = EnterpriseRAG()
