@@ -418,20 +418,28 @@ Final Answer:"""
     def rehydrate_from_cloud(self):
         """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
         print("Rehydrating BM25 from Pinecone cloud...")
-        # Since Pinecone doesn't support easy 'list all', we query with a random vector
-        # We use .tolist() to ensure standard Python floats for orjson serialization
+        # Since Pinecone doesn't support easy 'list all' in some tiers, we query with a random vector
         random_vector = np.random.rand(768).tolist()
         results = self.index.query(vector=random_vector, top_k=100, include_metadata=True)
         
-        self.chunks = []
-        self.chunk_ids = []
-        for match in results['matches']:
-            self.chunks.append(match['metadata']['text'])
-            self.chunk_ids.append(match['id'])
+        # Only overwrite if we actually found data in the cloud
+        if results and results.get('matches'):
+            new_chunks = []
+            new_ids = []
+            for match in results['matches']:
+                new_chunks.append(match['metadata']['text'])
+                new_ids.append(match['id'])
             
-        if self.chunks:
+            # Merge with existing if desired, or replace. 
+            # For startup sync, replacing is fine, but we only do it if we got data.
+            self.chunks = new_chunks
+            self.chunk_ids = new_ids
+            
             tokenized_corpus = [doc.lower().split(" ") for doc in self.chunks]
             self.bm25 = BM25Okapi(tokenized_corpus)
+            print(f"Cloud Sync Complete: {len(self.chunks)} chunks loaded.")
+        else:
+            print("No data found in cloud yet or random search missed. Local memory preserved.")
 
 if __name__ == "__main__":
     rag = EnterpriseRAG()

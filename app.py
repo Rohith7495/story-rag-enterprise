@@ -87,8 +87,6 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
                     except Exception as e:
                         st.error(f"Error processing {file.name}: {e}")
                 
-                status.update(label="Deep Syncing active knowledge base...", state="running")
-                rag.rehydrate_from_cloud() 
                 status.update(label="All documents successfully indexed!", state="complete", expanded=False)
         else:
             st.warning("Please upload files first.")
