@@ -162,9 +162,9 @@ class EnterpriseRAG:
         """Fetches top 100 documents from Pinecone to populate BM25 on startup."""
         print("Rehydrating BM25 from Pinecone cloud...")
         try:
-            # A zero-vector is more reliable for 'listing' near the origin in small/new indexes
-            zero_vector = [0.0] * 768
-            results = self.index.query(vector=zero_vector, top_k=100, include_metadata=True)
+            # A completely zero vector fails in Cosine similarity (divide by zero). Usign a small constant vector.
+            dummy_vector = [1.0] * 768
+            results = self.index.query(vector=dummy_vector, top_k=100, include_metadata=True)
             
             if results and results.get('matches'):
                 new_chunks = []
@@ -204,8 +204,8 @@ class EnterpriseRAG:
     def run_smoke_test(self):
         """Tries to find any vector in the index regardless of stats."""
         try:
-            # Query with a zero vector to see if we get ANY matches
-            res = self.index.query(vector=[0.0]*768, top_k=1, include_metadata=True)
+            # Query with a non-zero vector (cosine similarity fails on pure zeros)
+            res = self.index.query(vector=[1.0]*768, top_k=1, include_metadata=True)
             if res and res.get('matches'):
                 return {"success": True, "match": res['matches'][0]['metadata'].get('text', 'ID: ' + res['matches'][0]['id'])}
             return {"success": False, "message": "No matches found. The index might be empty or still propagating."}
