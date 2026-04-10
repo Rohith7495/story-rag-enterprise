@@ -241,6 +241,25 @@ class EnterpriseRAG:
             print(f"Wipe failed: {e}")
             return False
 
+    def force_upsert_all(self):
+        """Resends all local chunks to Pinecone Regardless of previous state."""
+        if not self.chunks:
+            return False
+        
+        vectors_to_upsert = []
+        # Generate fresh embeddings for safety
+        embeddings = self.gemini_ef.embed_documents(self.chunks)
+        
+        for i, (chunk, emb) in enumerate(zip(self.chunks, embeddings)):
+            vectors_to_upsert.append({
+                "id": self.chunk_ids[i],
+                "values": emb,
+                "metadata": {"text": chunk, "timestamp": int(time.time()), "filename": "forced_reindex"}
+            })
+            
+        self.index.upsert(vectors=vectors_to_upsert)
+        return True
+
     def load_single_document(self, file_path: str):
         ext = os.path.splitext(file_path)[1].lower()
         extracted_text = ""

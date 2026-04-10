@@ -90,6 +90,11 @@ with st.sidebar:
                         st.rerun()
             else:
                 st.info("Dimensions are correct (768D).")
+                if st.button("🔄 Force Re-Index Local Memory"):
+                    if rag.force_upsert_all():
+                        st.success("Success! Local memory resent to cloud.")
+                    else:
+                        st.error("Nothing in local memory to re-index.")
         else:
             st.error(f"Connection Error: {health.get('message')}")
 
