@@ -127,7 +127,7 @@ class EnterpriseRAG:
         # Note: In Pinecone, we usually fetch all if we want to hydrate BM25 
         # For simplicity in this demo, we'll keep the local metadata if available or re-index.
         # However, a real app would store chunks in Pinecone metadata and fetch.
-        self._sync_local_metadata()
+        self.rehydrate_from_cloud()
 
     def _load_cache(self):
         if os.path.exists(self.cache_path):
