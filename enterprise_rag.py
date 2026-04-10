@@ -428,7 +428,15 @@ class EnterpriseRAG:
             final_filter["timestamp"] = {"$gte": cutoff}
             
         # 2. Check Semantic Cache First (Speed)
-        query_emb = self.gemini_ef.embed_query(question)
+        try:
+            query_emb = self.gemini_ef.embed_query(question)
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower():
+                def error_stream():
+                    yield "⚠️ **API Limit Reached!**\n\nYou have fully exhausted your Google Gemini Free Tier daily quota for generating embeddings (1,500 requests/day). The AI cannot convert your question into math right now to search the database. Please try again tomorrow, or upgrade your Google AI Studio plan!"
+                return {"answer_stream": error_stream(), "sources": [], "is_cached": False}
+            raise e
+            
         cached_result = self._check_cache(query_emb)
         
         if cached_result:
