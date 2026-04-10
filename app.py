@@ -62,22 +62,34 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
     uploaded_files = st.file_uploader("Upload new documents to Pinecone", accept_multiple_files=True)
     if st.button("🚀 Process & Index Files"):
         if uploaded_files:
-            for file in uploaded_files:
-                dest_path = os.path.join(docs_path, file.name)
-                with open(dest_path, "wb") as f:
-                    f.write(file.getbuffer())
+            with st.status("Processing and indexing documents...", expanded=True) as status:
+                for file in uploaded_files:
+                    dest_path = os.path.join(docs_path, file.name)
+                    with open(dest_path, "wb") as f:
+                        f.write(file.getbuffer())
+                    
+                    try:
+                        status.write(f"Reading `{file.name}`...")
+                        text = rag.load_single_document(dest_path)
+                        if text.strip():
+                            def progress_cb(msg):
+                                status.update(label=f"Processing `{file.name}`: {msg}")
+                                
+                            # Tag with filename and current unix time
+                            rag.load_and_process_story(
+                                text, 
+                                metadata={"filename": file.name, "timestamp": int(time.time())},
+                                status_callback=progress_cb
+                            )
+                            st.toast(f"✅ Indexed `{file.name}`")
+                        else:
+                            st.error(f"Failed to read `{file.name}`")
+                    except Exception as e:
+                        st.error(f"Error processing {file.name}: {e}")
                 
-                try:
-                    text = rag.load_single_document(dest_path)
-                    if text.strip():
-                        # Tag with filename and current unix time
-                        rag.load_and_process_story(text, metadata={"filename": file.name, "timestamp": int(time.time())})
-                        st.success(f"Successfully indexed `{file.name}`")
-                    else:
-                        st.error(f"Failed to read `{file.name}`")
-                except Exception as e:
-                    st.error(f"Error processing {file.name}: {e}")
-            rag.rehydrate_from_cloud() 
+                status.update(label="Deep Syncing active knowledge base...", state="running")
+                rag.rehydrate_from_cloud() 
+                status.update(label="All documents successfully indexed!", state="complete", expanded=False)
         else:
             st.warning("Please upload files first.")
             

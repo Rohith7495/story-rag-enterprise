@@ -22,11 +22,14 @@ class GeminiEmbeddingFunction:
         self.model_name = model_name
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, texts: list[str], status_callback: callable = None) -> list[list[float]]:
         batch_size = 100
         all_embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
+            
+            if status_callback:
+                status_callback(i, len(texts))
             
             # Quota handling for Free Tier (100 embed requests/min)
             max_retries = 5
@@ -51,6 +54,9 @@ class GeminiEmbeddingFunction:
                     else:
                         raise e
                         
+        if status_callback:
+            status_callback(len(texts), len(texts))
+            
         return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
@@ -159,8 +165,8 @@ class EnterpriseRAG:
         # For a full implementation, we'd query with a placeholder.
         pass
 
-    def load_and_process_story(self, text: str, chunk_size: int = 1000, overlap: int = 100, metadata: dict = None):
-        print("1. Chunking story intelligently...")
+    def load_and_process_story(self, text: str, chunk_size: int = 1000, overlap: int = 100, metadata: dict = None, status_callback: callable = None):
+        if status_callback: status_callback("Chunking document...")
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=overlap,
@@ -168,8 +174,15 @@ class EnterpriseRAG:
         )
         new_chunks = text_splitter.split_text(text)
         
+        if status_callback: status_callback(f"Generating embeddings for {len(new_chunks)} chunks...")
+        
+        # Internal callback to track embedding batch progress
+        def emb_cb(current, total):
+            if status_callback:
+                status_callback(f"Embedding: {current}/{total} chunks...")
+
         vectors_to_upsert = []
-        embeddings = self.gemini_ef.embed_documents(new_chunks)
+        embeddings = self.gemini_ef.embed_documents(new_chunks, status_callback=emb_cb)
         
         # Base metadata (shared by all chunks in this file)
         base_meta = metadata or {}
@@ -196,15 +209,15 @@ class EnterpriseRAG:
                 })
         
         if vectors_to_upsert:
-            print(f"2. Upserting {len(vectors_to_upsert)} unique vectors to Pinecone...")
+            if status_callback: status_callback(f"Upserting {len(vectors_to_upsert)} vectors to Pinecone...")
             self.index.upsert(vectors=vectors_to_upsert)
         else:
-            print("2. No new content detected. Pinecone is already up to date!")
+            if status_callback: status_callback("No new content to upsert.")
         
-        print("3. Refreshing BM25 Exact Keyword Search...")
+        # BM25 is local and fast
         tokenized_corpus = [doc.lower().split(" ") for doc in self.chunks]
         self.bm25 = BM25Okapi(tokenized_corpus)
-        print("Enterprise Indexing Complete!")
+        if status_callback: status_callback("Indexing Complete!")
 
     def load_single_document(self, file_path: str):
         ext = os.path.splitext(file_path)[1].lower()
