@@ -57,6 +57,15 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+    st.divider()
+    if st.button("🔄 Force Cloud Sync"):
+        with st.spinner("Syncing local memory with Pinecone cloud..."):
+            success = rag.rehydrate_from_cloud()
+            if success:
+                st.success(f"Successfully loaded {len(rag.chunks)} chunks from Cloud.")
+            else:
+                st.warning("Cloud search returned 0 results. Use the management section to upload documents.")
+
 # 4. Processing Interface
 with st.expander("☁️ Cloud Data Management", expanded=False):
     uploaded_files = st.file_uploader("Upload new documents to Pinecone", accept_multiple_files=True)
@@ -91,7 +100,18 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
         else:
             st.warning("Please upload files first.")
             
-    st.markdown(f"**Index Health:** {len(rag.chunks)} unique chunks currently in active memory.")
+    # Index Health Stats
+    cloud_count = rag.get_cloud_stats()
+    local_count = len(rag.chunks)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Local Active Memory", f"{local_count} Chunks")
+    with col2:
+        st.metric("Total Cloud Storage", f"{cloud_count} Vectors")
+    
+    if cloud_count > 0 and local_count == 0:
+        st.info("💡 Your data is in the cloud, but local memory is empty. Use the **'Force Cloud Sync'** button in the sidebar to load it.")
 
 # 5. Chat Interface
 if "messages" not in st.session_state:
