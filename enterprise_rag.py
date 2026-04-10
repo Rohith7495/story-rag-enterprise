@@ -217,7 +217,7 @@ class EnterpriseRAG:
         try:
             stats = self.index.describe_index_stats()
             return stats.total_vector_count
-        except:
+        except Exception:
             return 0
 
     def delete_and_recreate_index(self):
@@ -349,34 +349,6 @@ class EnterpriseRAG:
         self.bm25 = BM25Okapi(tokenized_corpus)
         if status_callback: status_callback("Indexing Complete!")
 
-    def load_single_document(self, file_path: str):
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext == '.txt':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        elif ext == '.pdf':
-            # Use LlamaParse for high-quality PDF parsing if available
-            if self.parser:
-                print(f"Using LlamaParse for {os.path.basename(file_path)}...")
-                try:
-                    documents = self.parser.load_data(file_path)
-                    return "\n\n".join([doc.text for doc in documents])
-                except Exception as e:
-                    print(f"LlamaParse failed, falling back to basic PDF parsing: {e}")
-            
-            # Basic fallback
-            import fitz
-            doc = fitz.open(file_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            return text
-        elif ext == '.docx':
-            from docx import Document
-            doc = Document(file_path)
-            return "\n".join([p.text for p in doc.paragraphs])
-        return ""
-
     def load_documents_from_folder(self, folder_path: str):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
@@ -384,7 +356,6 @@ class EnterpriseRAG:
 
         import glob
         files = glob.glob(os.path.join(folder_path, "*"))
-        combined_text = ""
         for file_path in files:
             if os.path.isfile(file_path) and not os.path.basename(file_path).startswith('.'):
                 print(f"Reading {file_path}...")
@@ -404,7 +375,6 @@ class EnterpriseRAG:
             filter=filter
         )
         
-        vector_chunks = [match['metadata']['text'] for match in vector_results['matches']]
         vector_ids = [match['id'] for match in vector_results['matches']]
         
         # -- 2. BM25 Keyword Search --
