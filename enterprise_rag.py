@@ -212,6 +212,14 @@ class EnterpriseRAG:
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def get_cloud_stats(self):
+        """Returns total vector count from Pinecone."""
+        try:
+            stats = self.index.describe_index_stats()
+            return stats.total_vector_count
+        except:
+            return 0
+
     def delete_and_recreate_index(self):
         """Wipes the index to fix dimension mismatches or corruption."""
         try:
