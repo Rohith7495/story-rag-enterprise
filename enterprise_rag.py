@@ -23,17 +23,17 @@ class GeminiEmbeddingFunction:
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
     def embed_documents(self, texts: list[str], status_callback: callable = None) -> list[list[float]]:
-        batch_size = 100
+        batch_size = 30 # Reduced for better UI responsiveness
         all_embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             
-            if status_callback:
-                status_callback(i, len(texts))
-            
             # Quota handling for Free Tier (100 embed requests/min)
             max_retries = 5
             retry_delay = 10 # Initial wait
+            
+            if status_callback:
+                status_callback(i, len(texts))
             
             for attempt in range(max_retries):
                 try:
@@ -46,7 +46,8 @@ class GeminiEmbeddingFunction:
                 except Exception as e:
                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                         if attempt < max_retries - 1:
-                            print(f"⚠️ Embedding quota hit. Waiting {retry_delay}s to respect Free Tier limits...")
+                            if status_callback:
+                                status_callback(i, len(texts), wait_msg=f" (Quota hit, waiting {retry_delay}s...)")
                             time.sleep(retry_delay)
                             retry_delay *= 2 # Exponential backoff
                         else:
@@ -177,9 +178,9 @@ class EnterpriseRAG:
         if status_callback: status_callback(f"Generating embeddings for {len(new_chunks)} chunks...")
         
         # Internal callback to track embedding batch progress
-        def emb_cb(current, total):
+        def emb_cb(current, total, wait_msg=""):
             if status_callback:
-                status_callback(f"Embedding: {current}/{total} chunks...")
+                status_callback(f"Embedding: {current}/{total} chunks{wait_msg}")
 
         vectors_to_upsert = []
         embeddings = self.gemini_ef.embed_documents(new_chunks, status_callback=emb_cb)
