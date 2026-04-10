@@ -107,7 +107,8 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
                     try:
                         status.write(f"Reading `{file.name}`...")
                         text = rag.load_single_document(dest_path)
-                        if text.strip():
+                        if text and text.strip():
+                            status.write(f"✅ Extracted **{len(text)}** characters.")
                             def progress_cb(msg):
                                 status.update(label=f"Processing `{file.name}`: {msg}")
                                 
@@ -117,9 +118,9 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
                                 metadata={"filename": file.name, "timestamp": int(time.time())},
                                 status_callback=progress_cb
                             )
-                            st.toast(f"✅ Indexed `{file.name}`")
+                            st.toast(f"✅ Indexed `{file.name}` ({len(text)} chars)")
                         else:
-                            st.error(f"Failed to read `{file.name}`")
+                            st.error(f"❌ Failed to extract text from `{file.name}`. The file might be empty or a scan without OCR.")
                     except Exception as e:
                         st.error(f"Error processing {file.name}: {e}")
                 
