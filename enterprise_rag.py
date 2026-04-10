@@ -186,79 +186,7 @@ class EnterpriseRAG:
             print(f"Rehydration error: {e}")
         return False
 
-    def check_index_health(self):
-        """Checks index dimensions and connectivity."""
-        try:
-            desc = self.pc.describe_index(self.index_name)
-            stats = self.index.describe_index_stats()
-            return {
-                "status": "Ready",
-                "dimension": desc.dimension,
-                "total_vectors": stats.total_vector_count,
-                "is_correct_dim": desc.dimension == 3072,
-                "namespaces": stats.namespaces
-            }
-        except Exception as e:
-            return {"status": "Error", "message": str(e)}
 
-    def run_smoke_test(self):
-        """Tries to find any vector in the index regardless of stats."""
-        try:
-            # Query with a non-zero vector (cosine similarity fails on pure zeros)
-            res = self.index.query(vector=[1.0]*3072, top_k=1, include_metadata=True)
-            if res and res.get('matches'):
-                return {"success": True, "match": res['matches'][0]['metadata'].get('text', 'ID: ' + res['matches'][0]['id'])}
-            return {"success": False, "message": "No matches found. The index might be empty or still propagating."}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    def get_cloud_stats(self):
-        """Returns total vector count from Pinecone."""
-        try:
-            stats = self.index.describe_index_stats()
-            return stats.total_vector_count
-        except Exception:
-            return 0
-
-    def delete_and_recreate_index(self):
-        """Wipes the index to fix dimension mismatches or corruption."""
-        try:
-            self.pc.delete_index(self.index_name)
-            import time
-            time.sleep(5) # Give Pinecone time to process deletion
-            self.pc.create_index(
-                name=self.index_name,
-                dimension=3072,
-                metric='cosine',
-                spec=ServerlessSpec(cloud='aws', region='us-east-1')
-            )
-            self.index = self.pc.Index(self.index_name)
-            self.chunks = []
-            self.chunk_ids = []
-            self.bm25 = None
-            return True
-        except Exception as e:
-            print(f"Wipe failed: {e}")
-            return False
-
-    def force_upsert_all(self):
-        """Resends all local chunks to Pinecone Regardless of previous state."""
-        if not self.chunks:
-            return False
-        
-        vectors_to_upsert = []
-        # Generate fresh embeddings for safety
-        embeddings = self.gemini_ef.embed_documents(self.chunks)
-        
-        for i, (chunk, emb) in enumerate(zip(self.chunks, embeddings)):
-            vectors_to_upsert.append({
-                "id": self.chunk_ids[i],
-                "values": emb,
-                "metadata": {"text": chunk, "timestamp": int(time.time()), "filename": "forced_reindex"}
-            })
-            
-        self.index.upsert(vectors=vectors_to_upsert)
-        return True
 
     def load_single_document(self, file_path: str):
         ext = os.path.splitext(file_path)[1].lower()

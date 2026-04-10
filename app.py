@@ -57,46 +57,6 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-    st.divider()
-    if st.button("🔄 Force Cloud Sync"):
-        with st.spinner("Syncing local memory with Pinecone cloud..."):
-            success = rag.rehydrate_from_cloud()
-            if success:
-                st.success(f"Successfully loaded {len(rag.chunks)} chunks from Cloud.")
-            else:
-                st.warning("Cloud search returned 0 results. Use the management section to upload documents.")
-
-    st.divider()
-    with st.expander("🛠️ Debug & Repair Index"):
-        health = rag.check_index_health()
-        if health["status"] == "Ready":
-            st.success("Internal Connection: OK")
-            st.write(f"Index Dimension: `{health['dimension']}`")
-            st.divider()
-            if st.button("🔍 Run Smoke Test Query"):
-                test = rag.run_smoke_test()
-                if test["success"]:
-                    st.success("🔥 Smoke Test Passed! Data exists in cloud.")
-                    st.write(f"Sample Content Found: `{test['match'][:150]}...`")
-                else:
-                    st.error(f"Smoke Test Failed: {test['message']}")
-            
-            if not health["is_correct_dim"]:
-                st.error("🚨 DIMENSION MISMATCH DETECTED!")
-                st.warning("Your index is 768D but Gemini generated 3072D vectors. This is why you see 0 vectors.")
-                if st.button("🔥 Wipe & Recreate Index"):
-                    if rag.delete_and_recreate_index():
-                        st.success("Index Recreated! Please press the Force Re-Index button below, or re-upload your files.")
-                        st.rerun()
-            else:
-                st.info("Dimensions are correct (3072D).")
-                if st.button("🔄 Force Re-Index Local Memory"):
-                    if rag.force_upsert_all():
-                        st.success("Success! Local memory resent to cloud.")
-                    else:
-                        st.error("Nothing in local memory to re-index.")
-        else:
-            st.error(f"Connection Error: {health.get('message')}")
 
 # 4. Processing Interface
 with st.expander("☁️ Cloud Data Management", expanded=False):
@@ -132,19 +92,6 @@ with st.expander("☁️ Cloud Data Management", expanded=False):
                 status.update(label="All documents successfully indexed!", state="complete", expanded=False)
         else:
             st.warning("Please upload files first.")
-            
-    # Index Health Stats
-    cloud_count = rag.get_cloud_stats()
-    local_count = len(rag.chunks)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Local Active Memory", f"{local_count} Chunks")
-    with col2:
-        st.metric("Total Cloud Storage", f"{cloud_count} Vectors")
-    
-    if cloud_count > 0 and local_count == 0:
-        st.info("💡 Your data is in the cloud, but local memory is empty. Use the **'Force Cloud Sync'** button in the sidebar to load it.")
 
 # 5. Chat Interface
 if "messages" not in st.session_state:
