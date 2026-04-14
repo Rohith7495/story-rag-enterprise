@@ -81,13 +81,17 @@ class EnterpriseRAG:
         # Setup LlamaParse if key is present
         self.parser = None
         if self.llama_api_key:
-            from llama_parse import LlamaParse
-            nest_asyncio.apply()
-            self.parser = LlamaParse(
-                api_key=self.llama_api_key,
-                result_type="markdown", # High fidelity for LLMs
-                verbose=True
-            )
+            try:
+                from llama_parse import LlamaParse
+                nest_asyncio.apply()
+                self.parser = LlamaParse(
+                    api_key=self.llama_api_key,
+                    result_type="markdown", # High fidelity for LLMs
+                    verbose=True
+                )
+            except (ImportError, TypeError) as e:
+                print(f"LlamaParse initialization failed (likely Python version mismatch): {e}")
+                self.parser = None
         
         if not self.pinecone_api_key:
             raise ValueError("PINECONE_API_KEY not found in environment variables.")
