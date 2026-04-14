@@ -44,3 +44,23 @@ Implement a caching layer (like GPTCache) to save question embeddings and their 
 
 6. Neural Re-Ranking (Advanced)
 Introduce a Cross-Encoder Re-Ranker before generating prompt context to sort and filter retrieved chunks much more accurately than basic reciprocal rank fusion.
+
+---
+
+# Phase 3: Production & Enterprise Grade
+
+1. RAG Observability & Tracing (LLMOps)
+Integrate tools like LangSmith or Arize Phoenix to trace every step of the RAG pipeline. This allows for deep debugging of why a retrieval failed or where context was lost.
+
+2. Automated Quality Evaluation (RAGAS)
+Implement "LLM-as-a-Judge" using the RAGAS framework. This provides quantifiable metrics (Faithfulness, Relevance, Precision) for every answer, moving beyond "vibe-based" testing.
+
+3. Agentic Query Expansion (Multi-Query Retrieval)
+Use an LLM to rewrite and expand user queries into multiple variations before searching the vector database. This captures different semantic angles and minimizes retrieval misses.
+
+4. PII Redaction & Security Layer
+Implement a cleaning layer (using Microsoft Presidio or similar) to redact sensitive PII (Emails, Names, SSNs) from documents before they are sent to external cloud APIs for embedding or generation.
+
+5. Multi-Tenant Data Isolation
+Implement strict namespace-based filtering in Pinecone to ensure that users only retrieve context from documents they have explicit permission to access, crucial for corporate security.
+
