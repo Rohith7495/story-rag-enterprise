@@ -17,3 +17,6 @@ chroma_storage/
 
 # Document folder (optional, but often good to exclude processed raw data)
 # documents/
+
+# Local Semantic Cache
+semantic_cache.json
